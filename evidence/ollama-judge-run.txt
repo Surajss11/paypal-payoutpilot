@@ -1,0 +1,21 @@
+  flag s006: block wallet_bait asks for wallet / seed actions
+  flag s004: block duplicate_payee ana@example.com already used by s002
+  flag s003: block near_duplicate text 90% similar to earlier s001
+judging 8 submissions with qwen2.5:3b ...
+  s001:  96.7  reviewer=False  The submission is original, presenting the concept of rebate cashback in a unique and enga
+  s002:  96.7  reviewer=True  The submission is original, presenting a new angle on how rebate cashback works for on-cha
+  s007:  91.1  reviewer=False  The submission is original as it provides personal data and a real example of how Rebate c
+  s008:  67.8  reviewer=False  The submission is original in explaining the concept of rebate cashback for traders, provi
+  s005:  16.7  reviewer=False  submission lacks original research and angle, merely a greeting; clarity is lacking, no cl
+
+PAYOUT PLAN (review before approving)
+  #1  @chainwriter       chainwriter@example.com            1st           150.00 USD  
+  #2  @alpha_ana         ana@example.com                    2nd           100.00 USD  
+  #3  @datadan           dan@example.com                    3rd            50.00 USD  
+  #4  @newbie            newbie@unclaimed.test              runner-up      10.00 USD  
+  skipped s006: integrity check
+  skipped s004: integrity check
+  skipped s003: integrity check
+  skipped s005: score 16.7 below minimum 30.0
+  total 310.00 USD
+{"saved": "/tmp/ppd3/rebate-thread-oct26.json"}

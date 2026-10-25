@@ -1,0 +1,53 @@
+{
+  "started": "2026-10-25 17:13:54 IST",
+  "environment": "https://api-m.sandbox.paypal.com",
+  "steps": [
+    {
+      "step": "oauth2_client_credentials",
+      "ok": true,
+      "at": "2026-10-25 17:13:54 IST",
+      "token_ttl_s": 32045
+    },
+    {
+      "step": "plan_request",
+      "planner": "rules",
+      "at": "2026-10-25 17:13:54 IST",
+      "request": "Pay sb***0@personal.example.com $5.00 for winning the Rebate thread bounty and new.creator.payoutpilot@example.com $2.50 as runner-up",
+      "lines": [
+        {
+          "receiver": "sb***0@personal.example.com",
+          "amount": "5.00",
+          "note": "winning the Rebate thread bounty"
+        },
+        {
+          "receiver": "ne***t@example.com",
+          "amount": "2.50",
+          "note": "runner-up"
+        }
+      ],
+      "total": "7.50",
+      "warnings": []
+    },
+    {
+      "step": "orders_v2_funding_order",
+      "ok": true,
+      "at": "2026-10-25 17:13:56 IST",
+      "order_id": "80C32806LW267821C",
+      "status": "PAYER_ACTION_REQUIRED",
+      "amount": "7.50",
+      "currency": "USD",
+      "approve_url_host": "www.sandbox.paypal.com"
+    },
+    {
+      "step": "payouts_create_batch",
+      "ok": false,
+      "at": "2026-10-25 17:13:56 IST",
+      "http_status": 403,
+      "error": "PAYOUT_NOT_AVAILABLE",
+      "debug_id": "ca500f76b4fb9",
+      "detail": "PayPal 403 PAYOUT_NOT_AVAILABLE: You live in a country that is not allowed to send this payout. (debug_id=ca500f76b4fb9) hint: the app's sandbox business account is in a country that cannot send Payouts (e.g. IN). Create a US sandbox business account (developer.paypal.com > Testing Tools > Sandbox Accounts) and a sandbox app linked to it, then use that app's credentials."
+    }
+  ],
+  "finished": "2026-10-25 17:13:56 IST",
+  "campaign_state": "data/req-20261025-ab7f6f3f.json"
+}

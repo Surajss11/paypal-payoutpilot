@@ -27,7 +27,26 @@ def test_api_flow(tmp_path):
     assert c.post(f"/api/campaigns/{cid}/approve", json={"confirm_total": "1"}).status_code == 400
     st = c.post(f"/api/campaigns/{cid}/approve", json={"confirm_total": st["plan_total"]}).json()
     assert st["payout_batch_id"]
+    # once paid, nothing may change the plan (that would let a second approval pay again)
+    assert c.post(f"/api/campaigns/{cid}/exclude", json=[]).status_code == 400
+    assert c.post(f"/api/campaigns/{cid}/judge").status_code == 400
     st = c.post(f"/api/campaigns/{cid}/refresh").json()
     assert all(i["transaction_status"] in ("SUCCESS", "UNCLAIMED") for i in st["payout_status"]["items"])
     assert c.get("/").status_code == 200
     assert c.get("/api/campaigns/nope").status_code == 404
+
+
+def test_api_request_flow(tmp_path):
+    c = TestClient(create_app(Store(tmp_path), llm=MockChat(), paypal=MockPayPal()))
+    st = c.post("/api/requests", json={"text": "Pay ok@x.com $5 and lost@unclaimed.test $3 for memes"}).json()
+    cid = st["campaign"]["id"]
+    assert st["kind"] == "request" and st["plan_total"] == "8.00"
+    assert c.post(f"/api/campaigns/{cid}/approve", json={"confirm_total": "8"}).status_code == 200
+    st = c.post(f"/api/campaigns/{cid}/refresh?wait=true").json()
+    assert {i["transaction_status"] for i in st["payout_status"]["items"]} == {"SUCCESS", "UNCLAIMED"}
+    st = c.post(f"/api/campaigns/{cid}/cancel-unclaimed").json()
+    assert "RETURNED" in {i["transaction_status"] for i in st["payout_status"]["items"]}
+    st = c.post(f"/api/campaigns/{cid}/funding-order").json()
+    assert st["funding_order"]["status"] == "PAYER_ACTION_REQUIRED"
+    assert c.post("/api/requests", json={"text": " "}).status_code == 400
+    assert c.get("/api/health").json()["paypal"] == "mock"

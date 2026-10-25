@@ -2,5 +2,10 @@
 __pycache__/
 *.pyc
 data/
-.env
 .pytest_cache/
+# secrets: every .env file is ignored, only the template is tracked
+.env
+.env*
+!.env.example
+*.pem
+*.key

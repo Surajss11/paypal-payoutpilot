@@ -4,22 +4,41 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from .models import Campaign, Flag, PayoutPlan, Score, Submission
 
 
+class Event(BaseModel):
+    ts: str
+    kind: str
+    detail: str = ""
+
+
 class CampaignState(BaseModel):
     campaign: Campaign
+    kind: Literal["campaign", "request"] = "campaign"
+    request_text: str = ""
+    planner: str = ""
+    warnings: list[str] = Field(default_factory=list)
     submissions: list[Submission] = Field(default_factory=list)
     flags: dict[str, list[Flag]] = Field(default_factory=dict)
     scores: list[Score] = Field(default_factory=list)
     manual_excluded: list[str] = Field(default_factory=list)
     plan: PayoutPlan | None = None
+    approved_by: str | None = None
     payout_batch_id: str | None = None
     payout_status: dict | None = None
+    batches: list[str] = Field(default_factory=list)
+    funding_order: dict | None = None
+    events: list[Event] = Field(default_factory=list)
+
+    def log(self, kind: str, detail: str = "") -> None:
+        self.events.append(Event(ts=datetime.now(timezone.utc).isoformat(timespec="seconds"), kind=kind, detail=detail))
 
 
 class Store:
@@ -46,7 +65,8 @@ class Store:
         tmp.replace(p)
 
     def list(self) -> list[str]:
-        return sorted(p.stem for p in self.root.glob("*.json"))
+        """Newest first, so the dashboard opens the latest run."""
+        return [p.stem for p in sorted(self.root.glob("*.json"), key=lambda p: -p.stat().st_mtime)]
 
     def dump(self, cid: str) -> dict:
         return json.loads(self._path(cid).read_text())

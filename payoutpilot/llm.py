@@ -53,7 +53,9 @@ class MockChat:
 
 
 def client_from_env() -> ChatClient | MockChat:
-    provider = os.environ.get("LLM_PROVIDER", "mock").lower()
+    provider = os.environ.get("LLM_PROVIDER", "").lower()
+    if not provider:  # auto: first free key found, else the deterministic offline judge
+        provider = "gemini" if os.environ.get("GEMINI_API_KEY") else "groq" if os.environ.get("GROQ_API_KEY") else "mock"
     if provider == "mock":
         return MockChat()
     if provider in PROVIDERS:

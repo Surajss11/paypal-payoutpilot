@@ -1,4 +1,7 @@
 import json
+import os
+
+os.environ["PAYOUTPILOT_NO_DOTENV"] = "1"  # never load real sandbox credentials into tests
 from pathlib import Path
 
 import pytest

@@ -24,8 +24,8 @@ class Campaign(BaseModel):
     id: str
     title: str
     brief: str
-    rubric: list[Criterion]
-    prizes: list[PrizeTier]
+    rubric: list[Criterion] = Field(default_factory=list)
+    prizes: list[PrizeTier] = Field(default_factory=list)
     currency: str = "USD"
     budget: Decimal | None = None
     required_fields: list[str] = Field(default_factory=lambda: ["link", "paypal_email"])
@@ -74,6 +74,7 @@ class PayoutLine(BaseModel):
     tier: str
     amount: Decimal
     rank: int
+    note: str = ""
 
 
 class PayoutPlan(BaseModel):
