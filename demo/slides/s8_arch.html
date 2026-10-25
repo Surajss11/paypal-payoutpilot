@@ -1,0 +1,27 @@
+<html><head><link rel="stylesheet" href="base.css"><style>
+.row { display:flex; gap:26px; align-items:stretch; margin-bottom: 30px; }
+.box { flex:1; background: rgba(255,255,255,.1); border-radius:20px; padding: 26px 28px; font-size: 27px; line-height:1.35; }
+.box h3 { font-size: 32px; margin-bottom: 10px; color:#ffc439; }
+.pp { background:#fff; color:#003087; } .pp h3 { color:#0070e0; }
+.arrow { font-size: 50px; align-self:center; opacity:.8; }
+code { font-family: "DejaVu Sans Mono", monospace; font-size: 23px; }
+</style></head><body><div class="wrap" style="padding-top:80px">
+<h2 style="margin-bottom:36px">Architecture</h2>
+<div class="row">
+ <div class="box"><h3>Input</h3>Plain-English request<br>CSV of payees<br>Campaign + submissions</div>
+ <div class="arrow">&rarr;</div>
+ <div class="box"><h3>Agent &amp; judge</h3>Rule parser + LLM planner (receivers must appear in the request)<br>Integrity checks → AI judge → reviewer → allocator</div>
+ <div class="arrow">&rarr;</div>
+ <div class="box"><h3>Human approval</h3>AG Grid dashboard · type exact total · per-payee &amp; batch caps · plan frozen after pay</div>
+</div>
+<div class="row">
+ <div class="box pp"><h3>PayPal OAuth 2.0</h3>client credentials, token cache, 401 refresh</div>
+ <div class="box pp"><h3>Orders v2</h3>sponsor funds the prize pool<br><code>/v2/checkout/orders</code></div>
+ <div class="box pp"><h3>Payouts</h3>idempotent batch · polling · retry failed · cancel unclaimed<br><code>/v1/payments/payouts</code></div>
+</div>
+<div class="row">
+ <div class="box"><h3>AI providers</h3>Ollama qwen2.5 (local, free) · Gemini · Groq · any OpenAI-compatible API</div>
+ <div class="box"><h3>Stack</h3>Python 3.11 · FastAPI · httpx · Pydantic · AG Grid Community</div>
+ <div class="box"><h3>Quality</h3>29 tests, mocked HTTP · audit trail · bounded 5xx retry</div>
+</div>
+</div></body></html>

@@ -75,6 +75,11 @@ const $ = (id) => document.getElementById(id);
 const log = (m) => { $('log').textContent = `[${new Date().toLocaleTimeString()}] ${m}\n` + $('log').textContent; };
 const pill = (v) => v ? `<span class="pill ${v}">${v}</span>` : '';
 let state = null;
+// ?mask=1 hides receiver emails (for screen recordings and screenshots)
+const MASK = new URLSearchParams(location.search).get('mask') === '1';
+const mEmail = (e) => !MASK || !e ? e : e.replace(/([A-Za-z0-9._%+-]{1,2})[A-Za-z0-9._%+-]*([A-Za-z0-9_-])@/g, '$1***$2@');
+const mText = (t) => !MASK || !t ? t : t.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, mEmail);
+const mHandle = (h) => !MASK || !h ? h : (/^sb-/.test(h) ? h.slice(0, 4) + '***' : h);
 async function api(path, opts = {}) {
   const r = await fetch(path, opts); const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(body.detail || r.statusText); return body;
@@ -118,11 +123,11 @@ function render(st) {
     reasons: (scores[s.id]?.reasons || []).join(' · '),
   })));
   const items = Object.fromEntries((st.payout_status?.items || []).map(i => [i.payout_item.sender_item_id, i]));
-  planGrid.setGridOption('rowData', plan.map(l => ({ ...l, status: items[l.submission_id]?.transaction_status || (st.payout_batch_id ? 'PENDING' : ''),
+  planGrid.setGridOption('rowData', plan.map(l => ({ ...l, handle: mHandle(l.handle), paypal_email: mEmail(l.paypal_email), status: items[l.submission_id]?.transaction_status || (st.payout_batch_id ? 'PENDING' : ''),
     item_id: items[l.submission_id]?.payout_item_id || '' })));
   $('total').textContent = st.plan_total ? `${st.plan_total} ${st.campaign.currency}` : '';
   $('approve').disabled = !plan.length || !!st.payout_batch_id;
-  $('warnings').innerHTML = (st.warnings || []).map(w => `<li class="${w.startsWith('BLOCKED') ? 'b' : ''}">${w}</li>`).join('');
+  $('warnings').innerHTML = (st.warnings || []).map(w => `<li class="${w.startsWith('BLOCKED') ? 'b' : ''}">${mText(w)}</li>`).join('');
   const hdr = st.payout_status?.batch_header;
   $('batch').innerHTML = st.payout_batch_id ? `PayPal batch <b>${st.payout_batch_id}</b> ${pill(hdr?.batch_status)}` +
     (st.batches.length > 1 ? ` · earlier: ${st.batches.slice(0, -1).join(', ')}` : '') +
@@ -134,7 +139,7 @@ function render(st) {
   const stage = st.payout_batch_id ? 4 : st.approved_by ? 3 : plan.length ? 2 : st.submissions.length || isReq ? 1 : 0;
   $('steps').innerHTML = ['Import', 'Check + judge', 'Plan', 'Approve', 'Paid + tracked']
     .map((s, i) => `<span class="${i <= stage ? 'on' : ''}">${s}</span>`).join('');
-  $('events').textContent = (st.events || []).map(e => `${new Date(e.ts).toLocaleString()}  ${e.kind.padEnd(15)} ${e.detail}`).join('\n');
+  $('events').textContent = (st.events || []).map(e => `${new Date(e.ts).toLocaleString()}  ${e.kind.padEnd(15)} ${mText(e.detail)}`).join('\n');
 }
 async function loadCampaign(id) {
   id = id || $('campaign').value; if (!id) return;
@@ -171,7 +176,11 @@ $('approve').onclick = async () => {
 const action = (btn, path, msg) => { $(btn).onclick = async () => {
   try { render(await post(`/api/campaigns/${state.campaign.id}/${path}`)); log(msg); } catch (e) { log(e.message); } }; };
 action('refresh', 'refresh', 'payout status refreshed');
-action('retry', 'retry', 'retry batch sent for failed items (if any)');
+$('retry').onclick = async () => {
+  const before = (state.batches || []).length;
+  try { const st = await post(`/api/campaigns/${state.campaign.id}/retry`); render(st);
+    log(st.batches.length > before ? `retry batch ${st.payout_batch_id} sent for failed items` : 'no FAILED / BLOCKED / DENIED items: nothing re-sent'); }
+  catch (e) { log(e.message); } };
 action('cancel', 'cancel-unclaimed', 'unclaimed items returned to sender');
 action('fund', 'funding-order', 'sponsor funding order created (Orders v2)');
 (async () => {

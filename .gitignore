@@ -9,3 +9,7 @@ data/
 !.env.example
 *.pem
 *.key
+# demo build intermediates (recordings, voiceover, frames); scripts and slides are tracked
+demo/build/*
+!demo/build/*.py
+!demo/build/vo.json

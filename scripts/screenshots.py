@@ -10,7 +10,7 @@ with sync_playwright() as p:
     b = p.chromium.launch(channel="chrome", headless=True)
     pg = b.new_page(viewport={"width": 1440, "height": 1100}, device_scale_factor=1)
     for name, run in shots:
-        pg.goto(f"{base}/?run={run}")
+        pg.goto(f"{base}/?mask=1&run={run}")
         pg.wait_for_selector(".ag-row", timeout=20000)
         pg.wait_for_timeout(1200)
         pg.screenshot(path=f"docs/screenshots/{name}.png", full_page=True)
