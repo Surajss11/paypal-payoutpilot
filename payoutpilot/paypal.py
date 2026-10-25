@@ -121,6 +121,7 @@ class PayPalClient(_Polling):
     client_secret: str
     base_url: str = SANDBOX
     timeout: float = 30.0
+    retry_backoff: float = 1.5
     _token: str | None = field(default=None, repr=False)
     _token_exp: float = 0.0
     transport: httpx.BaseTransport | None = None
@@ -157,7 +158,9 @@ class PayPalClient(_Polling):
         return self._token
 
     def _request(self, method: str, path: str, *, json: dict | None = None, request_id: str | None = None,
-                 retries: int = 2) -> dict:
+                 retries: int = 3, idempotent: bool = False) -> dict:
+        """429/5xx are retried (bounded, linear backoff) only when a repeat cannot double-pay: GETs, writes that
+        carry a PayPal-Request-Id, and calls marked idempotent (e.g. cancelling an unclaimed item)."""
         headers = {"Authorization": f"Bearer {self.token()}", "Content-Type": "application/json",
                    "Prefer": "return=representation"}
         if request_id:
@@ -169,9 +172,9 @@ class PayPalClient(_Polling):
                 self._token = None
                 headers["Authorization"] = f"Bearer {self.token()}"
                 continue
-            # 429/5xx are safe to retry because every write carries a PayPal-Request-Id
-            if (r.status_code == 429 or r.status_code >= 500) and attempt < retries and (request_id or method == "GET"):
-                time.sleep(1.5 * (attempt + 1))
+            safe = bool(request_id) or idempotent or method == "GET"
+            if (r.status_code == 429 or r.status_code >= 500) and attempt < retries and safe:
+                time.sleep(self.retry_backoff * (attempt + 1))
                 continue
             break
         self._raise(r)
@@ -200,7 +203,7 @@ class PayPalClient(_Polling):
 
     def cancel_unclaimed(self, payout_item_id: str) -> dict:
         """Return the money of an UNCLAIMED item to the sender."""
-        return self._request("POST", f"/v1/payments/payouts-item/{payout_item_id}/cancel")
+        return self._request("POST", f"/v1/payments/payouts-item/{payout_item_id}/cancel", idempotent=True)
 
     # Orders v2: the sponsor funds the prize pool
     def create_order(self, reference_id: str, amount: Decimal, currency: str, description: str) -> dict:

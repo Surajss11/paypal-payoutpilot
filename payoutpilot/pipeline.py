@@ -123,10 +123,22 @@ def retry_failed(st: CampaignState, paypal) -> dict | None:
 
 def cancel_unclaimed(st: CampaignState, paypal) -> list[dict]:
     """Return money for items nobody claimed (e.g. the winner has no PayPal account yet)."""
+    from .paypal import PayPalError
+
     out = []
     for it in items_with(st, {"UNCLAIMED"}):
-        out.append(paypal.cancel_unclaimed(it["payout_item_id"]))
-        st.log("cancel_unclaimed", f"item {it['payout_item_id']} returned to sender")
+        iid = it["payout_item_id"]
+        try:
+            res = paypal.cancel_unclaimed(iid)
+        except PayPalError as e:
+            # A 5xx can still have cancelled the item server-side: trust the item's real status, not the error.
+            cur = paypal.get_payout_item(iid)
+            if cur.get("transaction_status") != "RETURNED":
+                st.log("cancel_error", f"item {iid}: {e}"[:500])
+                raise
+            res = cur
+        out.append(res)
+        st.log("cancel_unclaimed", f"item {iid} {res.get('transaction_status', 'RETURNED')}, money back to sender")
     return out
 
 

@@ -18,7 +18,7 @@ never claim, a double click that pays twice. PayoutPilot automates the boring pa
 | **Plan (agent)** | Two planners: a deterministic rule parser (always on, offline) and an optional LLM planner (Gemini / Groq / local Ollama). Every receiver and amount the model returns must literally appear in the request, so a hallucinated or injected payee can never reach PayPal. The two plans are diffed and any disagreement is shown. |
 | **Judge (campaigns)** | Deterministic integrity checks first (missing fields, invalid emails, same payee twice, same link twice, near-duplicate text, wallet/seed-phrase bait), then an AI judge scores each clean entry against the rubric with reasons and a second **reviewer pass** checks the scores. An allocator turns the ranking into prize tiers within the budget. |
 | **Approve (human)** | AG Grid dashboard: exclude anyone, see every warning, then approve by typing the **exact total**. Per-payee and per-batch caps (`PAYOUTPILOT_MAX_ITEM`, `PAYOUTPILOT_MAX_BATCH`). Once paid, the plan is frozen. |
-| **Pay (PayPal Payouts)** | OAuth2 client credentials, `POST /v1/payments/payouts` with a deterministic `sender_batch_id` and the same value as `PayPal-Request-Id`, so a retry or double click can never pay twice. 401 refreshes the token once, 429/5xx retry with the same request id. |
+| **Pay (PayPal Payouts)** | OAuth2 client credentials, `POST /v1/payments/payouts` with a deterministic `sender_batch_id` and the same value as `PayPal-Request-Id`, so a retry or double click can never pay twice. 401 refreshes the token once, 429/5xx get a bounded retry (3 retries, linear backoff) only when repeating is safe: GETs, writes with a request id, and idempotent cancels. |
 | **Track** | Polls `GET /v1/payments/payouts/{id}` until the batch and every item settle (SUCCESS / UNCLAIMED / FAILED / …). **Retry failed** re-sends only FAILED/BLOCKED/DENIED items in a new idempotent batch (`-rN`). **Cancel unclaimed** returns money for winners without a PayPal account (`POST /v1/payments/payouts-item/{id}/cancel`). |
 | **Fund (PayPal Orders v2)** | The sponsor pays the prize pool to the organiser: `POST /v2/checkout/orders` for the plan total returns a PayPal approval link; capture after approval. |
 | **Audit** | Every step (checked, judged, planned, approved by whom, batch created, status, retries, cancels, errors with PayPal debug id) is stored with the run. |
@@ -87,14 +87,24 @@ Live mode is locked unless `PAYOUTPILOT_ALLOW_LIVE=1` is set on purpose.
 
 ## Evidence
 
-**PayPal sandbox, 2026-10-25 17:13 IST** ([evidence/sandbox-run.json](evidence/sandbox-run.json), redacted):
+**Live PayPal sandbox run, 25 Oct 2026 (IST)** — US sandbox business app, redacted log in
+[evidence/sandbox-run.json](evidence/sandbox-run.json):
 
-| Step | Result |
-| --- | --- |
-| OAuth2 client credentials | 200, token cached for ~9 h |
-| Agent plan from natural language | 2 payees, 7.50 USD, 0 warnings (rule planner) |
-| Orders v2 sponsor funding order | `80C32806LW267821C`, status `PAYER_ACTION_REQUIRED`, approval link on www.sandbox.paypal.com |
-| Payouts batch create | `403 PAYOUT_NOT_AVAILABLE` (debug_id `ca500f76b4fb9`): the app's default sandbox business account is registered in India, which cannot send Payouts. Nothing was sent; the error, debug id and fix are in the audit trail. Re-run with a US sandbox business app (see Setup). |
+| Time (IST) | Step | Result |
+| --- | --- | --- |
+| 17:22:16 | OAuth2 client credentials | 200, token cached ~9 h |
+| 17:22:16 | Agent plan from natural language | 2 payees, 7.50 USD, 0 warnings (rule planner) |
+| 17:22:19 | Orders v2 sponsor funding order | `16864828RP192205Y` for 7.50 USD, `PAYER_ACTION_REQUIRED` (approval link on www.sandbox.paypal.com) |
+| 17:22:20 | Approve → Payouts batch create | **`8JYSZ8ZNGGT9N`**, `PENDING`, sender_batch_id `pp-req-20261025-ab7f6f3-a4b5c1ea7d70c12f` |
+| 17:22:53 | Status polling until settled | batch **`SUCCESS`**, 7.50 USD, fees 0.35 USD |
+| | item `TA3RPV7Q8467U` | 5.00 USD → sandbox personal account: **`SUCCESS`** (fee 0.10) |
+| | item `QULHAJUARL9TY` | 2.50 USD → unregistered address: **`UNCLAIMED`** (`RECEIVER_UNREGISTERED`, fee 0.25) |
+| 17:22:58 – 17:27:49 | Cancel unclaimed (`POST /v1/payments/payouts-item/QULHAJUARL9TY/cancel`) | sandbox answers `500 INTERNAL_SERVICE_ERROR` on every attempt, with bounded retries (debug_ids `f33391140f160`, `f25336755330e`, `f4435458a79a4`). Item stays `UNCLAIMED`; PayPal auto-returns unclaimed funds after 30 days. |
+
+Exactly one batch was created: re-running `scripts/sandbox_evidence.py` resumes the saved run (poll + cancel)
+instead of paying again, and a repeated approval returns the same batch (deterministic `sender_batch_id` +
+`PayPal-Request-Id`). An earlier run against an India sandbox business app was refused with
+`403 PAYOUT_NOT_AVAILABLE`; PayoutPilot now explains that error and how to fix it.
 
 ![Real sandbox run](docs/screenshots/dashboard-real-sandbox.png)
 

@@ -1,17 +1,17 @@
 {
-  "started": "2026-10-25 17:13:54 IST",
+  "started": "2026-10-25 17:27:26 IST",
   "environment": "https://api-m.sandbox.paypal.com",
   "steps": [
     {
       "step": "oauth2_client_credentials",
       "ok": true,
-      "at": "2026-10-25 17:13:54 IST",
-      "token_ttl_s": 32045
+      "at": "2026-10-25 17:27:27 IST",
+      "token_ttl_s": 32088
     },
     {
       "step": "plan_request",
       "planner": "rules",
-      "at": "2026-10-25 17:13:54 IST",
+      "at": "2026-10-25 17:27:27 IST",
       "request": "Pay sb***0@personal.example.com $5.00 for winning the Rebate thread bounty and new.creator.payoutpilot@example.com $2.50 as runner-up",
       "lines": [
         {
@@ -31,23 +31,87 @@
     {
       "step": "orders_v2_funding_order",
       "ok": true,
-      "at": "2026-10-25 17:13:56 IST",
-      "order_id": "80C32806LW267821C",
+      "at": "2026-10-25 17:27:29 IST",
+      "order_id": "16864828RP192205Y",
       "status": "PAYER_ACTION_REQUIRED",
       "amount": "7.50",
       "currency": "USD",
+      "reused": true,
       "approve_url_host": "www.sandbox.paypal.com"
     },
     {
       "step": "payouts_create_batch",
+      "ok": true,
+      "at": "2026-10-25 17:27:29 IST",
+      "payout_batch_id": "8JYSZ8ZNGGT9N",
+      "reused_existing": true,
+      "sender_batch_id": "pp-req-20261025-ab7f6f3-a4b5c1ea7d70c12f",
+      "batch_status": "SUCCESS"
+    },
+    {
+      "step": "payouts_poll_status",
+      "ok": true,
+      "at": "2026-10-25 17:27:31 IST",
+      "payout_batch_id": "8JYSZ8ZNGGT9N",
+      "batch_status": "SUCCESS",
+      "time_created": "2026-10-25T11:52:20Z",
+      "time_completed": "2026-10-25T11:52:53Z",
+      "amount": {
+        "currency": "USD",
+        "value": "7.50"
+      },
+      "fees": {
+        "currency": "USD",
+        "value": "0.35"
+      },
+      "items": [
+        {
+          "payout_item_id": "TA3RPV7Q8467U",
+          "transaction_status": "SUCCESS",
+          "receiver": "sb***0@personal.example.com",
+          "amount": {
+            "currency": "USD",
+            "value": "5.00"
+          },
+          "fee": {
+            "currency": "USD",
+            "value": "0.10"
+          },
+          "error": null
+        },
+        {
+          "payout_item_id": "QULHAJUARL9TY",
+          "transaction_status": "UNCLAIMED",
+          "receiver": "ne***t@example.com",
+          "amount": {
+            "currency": "USD",
+            "value": "2.50"
+          },
+          "fee": {
+            "currency": "USD",
+            "value": "0.25"
+          },
+          "error": "RECEIVER_UNREGISTERED"
+        }
+      ]
+    },
+    {
+      "step": "payouts_cancel_unclaimed",
       "ok": false,
-      "at": "2026-10-25 17:13:56 IST",
-      "http_status": 403,
-      "error": "PAYOUT_NOT_AVAILABLE",
-      "debug_id": "ca500f76b4fb9",
-      "detail": "PayPal 403 PAYOUT_NOT_AVAILABLE: You live in a country that is not allowed to send this payout. (debug_id=ca500f76b4fb9) hint: the app's sandbox business account is in a country that cannot send Payouts (e.g. IN). Create a US sandbox business account (developer.paypal.com > Testing Tools > Sandbox Accounts) and a sandbox app linked to it, then use that app's credentials."
+      "at": "2026-10-25 17:27:49 IST",
+      "http_status": 500,
+      "error": "INTERNAL_SERVICE_ERROR",
+      "debug_id": "f4435458a79a4",
+      "detail": "PayPal 500 INTERNAL_SERVICE_ERROR: An internal service error has occurred (debug_id=f4435458a79a4)"
     }
   ],
-  "finished": "2026-10-25 17:13:56 IST",
-  "campaign_state": "data/req-20261025-ab7f6f3f.json"
+  "resumed_existing_batch": true,
+  "finished": "2026-10-25 17:27:49 IST",
+  "campaign_state": "data/req-20261025-ab7f6f3f.json",
+  "notes": [
+    "Single live batch for this request: 8JYSZ8ZNGGT9N, created 2026-10-25 17:22:20 IST (PENDING), completed 17:22:53 IST (SUCCESS). Re-runs resumed it instead of creating more batches.",
+    "Item TA3RPV7Q8467U 5.00 USD to the sandbox personal account: SUCCESS. Item QULHAJUARL9TY 2.50 USD to an unregistered address: UNCLAIMED (RECEIVER_UNREGISTERED), which is the expected outcome for a winner without a PayPal account.",
+    "Cancel of QULHAJUARL9TY (POST /v1/payments/payouts-item/QULHAJUARL9TY/cancel) returns PayPal 500 INTERNAL_SERVICE_ERROR on every attempt in the sandbox, including the bounded retries: debug_ids f33391140f160 (17:22:58), f25336755330e (17:24:38), f4035794f8c18, f3870398091f3, f959478cf8c8b (manual body variants), f4435458a79a4 (17:27:49 IST). The item stays UNCLAIMED; PayPal returns unclaimed funds to the sender automatically after 30 days.",
+    "The first 17:22 run labelled the cancel failure as 'payouts_create_batch' because one try/except covered all payout steps; fixed so every step is recorded under its own name."
+  ]
 }

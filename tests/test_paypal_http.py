@@ -82,7 +82,7 @@ def test_retries_5xx_with_same_request_id_and_refreshes_401():
         httpx.Response(503, json={"name": "SERVICE_UNAVAILABLE"}),
         httpx.Response(201, json={"batch_header": {"payout_batch_id": "B2", "batch_status": "PENDING"}})])
     st = agent.plan_request("Pay a@x.com $5")
-    res = PayPalClient("id", "secret").create_payout(st.plan, "s", "m")
+    res = PayPalClient("id", "secret", retry_backoff=0).create_payout(st.plan, "s", "m")
     ids = {c.request.headers["PayPal-Request-Id"] for c in route.calls}
     assert res["batch_header"]["payout_batch_id"] == "B2" and len(ids) == 1 and tok.call_count == 2
 
@@ -97,3 +97,43 @@ def test_client_repr_and_env_loader_never_leak(tmp_path, monkeypatch):
     import os
     assert os.environ["PAYPAL_CLIENT_ID"] == "fromenv" and os.environ["PAYPAL_ENV"] == "sandbox"
     assert mask_email("winner@example.com") == "wi***r@example.com"
+
+
+@respx.mock
+def test_cancel_unclaimed_retries_5xx_then_succeeds():
+    token_route()
+    cancel = respx.post(f"{SANDBOX}/v1/payments/payouts-item/I7/cancel").mock(side_effect=[
+        httpx.Response(500, json={"name": "INTERNAL_SERVICE_ERROR"}),
+        httpx.Response(200, json={"payout_item_id": "I7", "transaction_status": "RETURNED"})])
+    c = PayPalClient("id", "secret", retry_backoff=0)
+    assert c.cancel_unclaimed("I7")["transaction_status"] == "RETURNED" and cancel.call_count == 2
+
+
+@respx.mock
+def test_retries_are_bounded_and_unsafe_posts_are_not_retried():
+    token_route()
+    always = respx.post(f"{SANDBOX}/v1/payments/payouts-item/I8/cancel").mock(
+        return_value=httpx.Response(500, json={"name": "INTERNAL_SERVICE_ERROR"}))
+    c = PayPalClient("id", "secret", retry_backoff=0)
+    with pytest.raises(PayPalError):
+        c.cancel_unclaimed("I8")
+    assert always.call_count == 4  # 1 try + 3 bounded retries
+    plain = respx.post(f"{SANDBOX}/v1/unsafe").mock(return_value=httpx.Response(503, json={"name": "X"}))
+    with pytest.raises(PayPalError):
+        c._request("POST", "/v1/unsafe", json={})
+    assert plain.call_count == 1  # no request id, not idempotent: never repeated
+
+
+@respx.mock
+def test_pipeline_cancel_trusts_item_status_after_persistent_5xx():
+    token_route()
+    respx.post(f"{SANDBOX}/v1/payments/payouts-item/I5/cancel").mock(
+        return_value=httpx.Response(500, json={"name": "INTERNAL_SERVICE_ERROR"}))
+    respx.get(f"{SANDBOX}/v1/payments/payouts-item/I5").mock(
+        return_value=httpx.Response(200, json={"payout_item_id": "I5", "transaction_status": "RETURNED"}))
+    st = agent.plan_request("Pay a@x.com $5")
+    st.payout_batch_id = "B5"
+    st.payout_status = {"items": [{"payout_item_id": "I5", "transaction_status": "UNCLAIMED",
+                                   "payout_item": {"receiver": "a@x.com", "sender_item_id": "x"}}]}
+    out = pipeline.cancel_unclaimed(st, PayPalClient("id", "secret", retry_backoff=0))
+    assert out[0]["transaction_status"] == "RETURNED" and st.events[-1].kind == "cancel_unclaimed"
