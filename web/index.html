@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PayoutPilot · judge and pay with PayPal</title>
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/dist/ag-grid-community.min.js"></script>
+<style>
+  :root { --blue:#003087; --sky:#009cde; --bg:#f5f7fa; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:#1a1a1a; }
+  header { background:var(--blue); color:#fff; padding:14px 24px; display:flex; align-items:center; gap:16px; }
+  header h1 { font-size:20px; margin:0; } header span { opacity:.8; font-size:13px; }
+  main { padding:18px 24px; display:grid; gap:16px; }
+  .card { background:#fff; border-radius:10px; padding:14px 16px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  button { background:var(--sky); color:#fff; border:0; border-radius:20px; padding:8px 16px; font-weight:600; cursor:pointer; }
+  button.secondary { background:#e8eef5; color:var(--blue); } button:disabled { opacity:.5; cursor:default; }
+  select, input { padding:7px 10px; border:1px solid #ccd; border-radius:6px; }
+  .grid { height:340px; } .grid.small { height:230px; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:12px; background:#eef; margin:1px; }
+  .block { background:#fde2e1; color:#a1170f; } .warn { background:#fff4ce; color:#7a5b00; }
+  #log { font-family: ui-monospace, monospace; font-size:12px; white-space:pre-wrap; max-height:140px; overflow:auto; }
+  .total { font-size:18px; font-weight:700; color:var(--blue); }
+</style>
+</head>
+<body>
+<header><h1>PayoutPilot</h1><span>AI judge &rarr; human approval &rarr; PayPal Payouts</span><span id="health" style="margin-left:auto"></span></header>
+<main>
+  <div class="card row">
+    <label>Campaign <select id="campaign"></select></label>
+    <input type="file" id="csv" accept=".csv">
+    <button class="secondary" id="upload">Upload submissions CSV</button>
+    <button id="judge">Run checks + AI judge</button>
+  </div>
+  <div class="card"><b>Submissions</b> <small>(uncheck “include” to exclude a winner manually)</small>
+    <div id="subs" class="grid ag-theme-quartz"></div></div>
+  <div class="card"><div class="row"><b>Payout plan</b><span class="total" id="total"></span>
+      <input id="confirm" placeholder="type the total to approve" size="22">
+      <button id="approve">Approve &amp; pay with PayPal</button>
+      <button class="secondary" id="refresh">Refresh payout status</button></div>
+    <div id="plan" class="grid small ag-theme-quartz"></div></div>
+  <div class="card"><b>Activity</b><div id="log"></div></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const log = (m) => { $('log').textContent = `[${new Date().toLocaleTimeString()}] ${m}\n` + $('log').textContent; };
+let state = null;
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts); const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || r.statusText); return body;
+}
+const flagCell = (p) => (p.value || []).map(f => `<span class="pill ${f.severity}">${f.code}</span>`).join('');
+const subsGrid = agGrid.createGrid($('subs'), {
+  columnDefs: [
+    { field: 'include', width: 95, editable: (p) => !p.data.blocked, cellDataType: 'boolean' },
+    { field: 'rank', width: 80 }, { field: 'handle', width: 140 }, { field: 'total', headerName: 'score', width: 95, sort: 'desc' },
+    { field: 'flags', cellRenderer: flagCell, width: 220 }, { field: 'reviewer', width: 105 },
+    { field: 'reasons', flex: 1, tooltipField: 'reasons' }, { field: 'link', width: 220,
+      cellRenderer: (p) => p.value ? `<a href="${p.value}" target="_blank" rel="noopener">${p.value}</a>` : '' },
+  ],
+  rowData: [], defaultColDef: { sortable: true, resizable: true, filter: true },
+  onCellValueChanged: async () => {
+    const ids = []; subsGrid.forEachNode(n => { if (!n.data.include && !n.data.blocked) ids.push(n.data.id); });
+    render(await api(`/api/campaigns/${state.campaign.id}/exclude`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(ids) }));
+    log(`manual exclusions: ${ids.join(', ') || 'none'}`);
+  },
+});
+const planGrid = agGrid.createGrid($('plan'), {
+  columnDefs: [{ field: 'rank', width: 80 }, { field: 'handle' }, { field: 'paypal_email', flex: 1 }, { field: 'tier' },
+    { field: 'amount' }, { field: 'status', cellRenderer: (p) => p.value ? `<span class="pill">${p.value}</span>` : '' }],
+  rowData: [], defaultColDef: { resizable: true },
+});
+function render(st) {
+  state = st;
+  const scores = Object.fromEntries(st.scores.map(s => [s.submission_id, s]));
+  const plan = st.plan ? st.plan.lines : [];
+  const rank = Object.fromEntries(plan.map(l => [l.submission_id, l.rank]));
+  const blocked = new Set(Object.entries(st.flags).filter(([, f]) => f.some(x => x.severity === 'block')).map(([k]) => k));
+  subsGrid.setGridOption('rowData', st.submissions.map(s => ({
+    id: s.id, handle: s.handle, link: s.link, flags: st.flags[s.id] || [], blocked: blocked.has(s.id),
+    include: !st.excluded.includes(s.id), total: scores[s.id]?.total ?? null, rank: rank[s.id] ?? null,
+    reviewer: scores[s.id]?.reviewer_agrees == null ? '' : (scores[s.id].reviewer_agrees ? 'agrees' : 'disputes'),
+    reasons: (scores[s.id]?.reasons || []).join(' · '),
+  })));
+  const items = Object.fromEntries((st.payout_status?.items || []).map(i => [i.payout_item.sender_item_id, i.transaction_status]));
+  planGrid.setGridOption('rowData', plan.map(l => ({ ...l, status: items[l.submission_id] || (st.payout_batch_id ? 'PENDING' : '') })));
+  $('total').textContent = st.plan_total ? `${st.plan_total} ${st.campaign.currency}` : '';
+  $('approve').disabled = !plan.length || !!st.payout_batch_id;
+}
+async function loadCampaign() { const id = $('campaign').value; if (id) render(await api(`/api/campaigns/${id}`)); }
+$('campaign').onchange = loadCampaign;
+$('upload').onclick = async () => {
+  const f = $('csv').files[0]; if (!f) return log('choose a CSV first');
+  const fd = new FormData(); fd.append('file', f);
+  render(await api(`/api/campaigns/${state.campaign.id}/submissions.csv`, { method: 'POST', body: fd })); log(`uploaded ${f.name}`);
+};
+$('judge').onclick = async () => {
+  $('judge').disabled = true; log('running integrity checks and AI judge…');
+  try { render(await api(`/api/campaigns/${state.campaign.id}/judge`, { method: 'POST' })); log('judging done'); }
+  catch (e) { log('judge failed: ' + e.message); } finally { $('judge').disabled = false; }
+};
+$('approve').onclick = async () => {
+  try {
+    const st = await api(`/api/campaigns/${state.campaign.id}/approve`, { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ confirm_total: $('confirm').value.trim() }) });
+    render(st); log(`PayPal payout batch ${st.payout_batch_id} created`);
+  } catch (e) { log('approval refused: ' + e.message); }
+};
+$('refresh').onclick = async () => {
+  try { render(await api(`/api/campaigns/${state.campaign.id}/refresh`, { method: 'POST' })); log('payout status refreshed'); }
+  catch (e) { log(e.message); }
+};
+(async () => {
+  const h = await api('/api/health'); $('health').textContent = `model: ${h.llm} · PayPal: ${h.paypal}`;
+  const ids = await api('/api/campaigns'); $('campaign').innerHTML = ids.map(i => `<option>${i}</option>`).join('');
+  if (ids.length) loadCampaign(); else log('no campaigns yet: POST /api/campaigns or run the CLI once');
+})();
+</script>
+</body>
+</html>

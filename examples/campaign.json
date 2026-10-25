@@ -1,0 +1,20 @@
+{
+  "id": "rebate-thread-oct26",
+  "title": "Rebate Creator Thread Bounty",
+  "brief": "Write an original X thread that explains how Rebate cashback works for on-chain traders, with a real example, a clear call to action and no financial promises. Threads must be posted publicly and be at least 5 posts long.",
+  "rubric": [
+    {"name": "originality", "weight": 3, "description": "own research and angle, not a copy of the docs"},
+    {"name": "clarity", "weight": 2, "description": "easy to follow for a new user"},
+    {"name": "accuracy", "weight": 3, "description": "facts match the brief, no financial promises"},
+    {"name": "reach", "weight": 1, "description": "engaging hook and call to action"}
+  ],
+  "prizes": [
+    {"label": "1st", "amount": "150.00"},
+    {"label": "2nd", "amount": "100.00"},
+    {"label": "3rd", "amount": "50.00"},
+    {"label": "runner-up", "amount": "10.00", "places": 3}
+  ],
+  "currency": "USD",
+  "budget": "330.00",
+  "min_score": 30
+}
